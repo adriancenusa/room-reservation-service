@@ -1,0 +1,133 @@
+openapi: 3.0.3
+info:
+  title: Room Reservation Service API
+  version: 1.0.0
+  description: API for confirming room reservations in Marvel Hospitality.
+
+servers:
+  - url: http://localhost:8080
+
+paths:
+  /reservations/confirm:
+    post:
+      tags: [Reservations]
+      summary: Confirm a room reservation
+      description: >
+        Confirms a room reservation according to payment mode.
+        - CASH: confirmed immediately
+        - CREDIT_CARD: confirmed only if credit-card-payment-service returns CONFIRMED
+        - BANK_TRANSFER: reservation created with PENDING_PAYMENT and later confirmed via payment updates
+      operationId: confirmReservation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmReservationRequest"
+      responses:
+        "200":
+          description: Reservation created and status returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConfirmReservationResponse"
+        "400":
+          description: Validation error (invalid dates, >30 days, missing fields, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Conflict (room not available or payment not confirmed)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Dependency failure (credit-card-payment-service unavailable/timeout)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    ConfirmReservationRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - customerName
+        - roomNumber
+        - startDate
+        - endDate
+        - roomSegment
+        - paymentMode
+      properties:
+        customerName:
+          type: string
+          minLength: 1
+          maxLength: 200
+          example: "Peter Parker"
+        roomNumber:
+          type: integer
+          example: "1207"
+        startDate:
+          type: string
+          format: date
+          example: "2026-03-10"
+        endDate:
+          type: string
+          format: date
+          example: "2026-03-12"
+        roomSegment:
+          $ref: "#/components/schemas/RoomSegment"
+        paymentMode:
+          $ref: "#/components/schemas/PaymentMode"
+        paymentReference:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: "DL123456789"
+
+    ConfirmReservationResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - reservationId
+        - status
+      properties:
+        reservationId:
+          type: string
+          minLength: 8
+          maxLength: 8
+          pattern: "^[A-Z0-9]{8}$"
+          description: Reservation identifier
+          example: "P4145478"
+        status:
+          $ref: "#/components/schemas/ReservationStatus"
+
+    RoomSegment:
+      type: string
+      enum: [SMALL, MEDIUM, LARGE, EXTRA_LARGE]
+
+    PaymentMode:
+      type: string
+      enum: [CASH, BANK_TRANSFER, CREDIT_CARD]
+
+    ReservationStatus:
+      type: string
+      enum: [PENDING_PAYMENT, CONFIRMED, CANCELLED]
+
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error, code]
+      properties:
+        code:
+          type: string
+          description: Stable error code for clients
+          example: "ROOM_NOT_AVAILABLE"
+        error:
+          type: string
+          description: Human-readable message
+          example: "Room 1207 is not available for the requested dates."
